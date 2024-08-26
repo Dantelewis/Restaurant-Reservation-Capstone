@@ -72,13 +72,6 @@ function hasValidTime(req, res, next) {
   const { data = {} } = req.body;
   const time = data["reservation_time"];
 
-  if (!/^([0-1][0-9]|2[0-3]):([0-5][0-9])$/.test(time)) {
-    next({
-      status: 400,
-      message: `Invalid reservation_time`,
-    });
-  }
-
   const hours = Number(time.split(":")[0]);
   const minutes = Number(time.split(":")[1]);
   if (hours < 10 || (hours === 10 && minutes < 30)) {
@@ -161,6 +154,26 @@ async function reservationExists(req, res, next) {
 }
 
 /**
+ * Convert UTC date to local time zone
+ */
+function convertToLocalTime(reservation) {
+  // Convert the reservation_date to local time zone
+  const reservationDate = new Date(reservation.reservation_date);
+
+  // Format the date as "YYYY-MM-DD"
+  const year = reservationDate.getFullYear();
+  const month = String(reservationDate.getMonth() + 1).padStart(2, '0'); // Months are 0-based, so add 1
+  const day = String(reservationDate.getDate()).padStart(2, '0');
+  reservation.reservation_date = `${year}-${month}-${day}`;
+
+  // Convert reservation_time to local time zone and format as "HH:mm"
+  const timeOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+  reservation.reservation_time = new Date(`1970-01-01T${reservation.reservation_time}`).toLocaleTimeString(undefined, timeOptions);
+
+  return reservation;
+}
+
+/**
  * List handler for reservation resources
  */
 async function list(req, res) {
@@ -169,12 +182,14 @@ async function list(req, res) {
   const data = await (date
     ? reservationsService.list(date)
     : reservationsService.search(mobile_number));
-  res.json({ data });
+
+  const localData = data.map(convertToLocalTime);
+  res.json({ data: localData });
 }
 
 async function read(req, res) {
-  const data = res.locals.reservation;
-  res.json({ data });
+  const reservation = convertToLocalTime(res.locals.reservation);
+  res.json({ data: reservation });
 }
 
 async function create(req, res) {
